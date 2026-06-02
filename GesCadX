@@ -1,0 +1,279 @@
+import json
+import os
+import random
+import string
+import tkinter as tk
+from tkinter import messagebox, ttk
+import hashlib
+import sys
+
+FICHIER = "candidats.json"
+ADMIN_HASH = hashlib.sha256("qwerty".encode()).hexdigest() 
+
+def charger_donnees():
+    if not os.path.exists(FICHIER):
+        return []
+    with open(FICHIER, "r", encoding="utf-8") as fichier:
+        return json.load(fichier)
+
+def sauvegarder_donnees(candidats):
+    with open(FICHIER, "w", encoding="utf-8") as fichier:
+        json.dump(candidats, fichier, indent=4, ensure_ascii=False)
+
+def hash_password(pwd_str):
+    return hashlib.sha256(pwd_str.encode()).hexdigest()
+
+def ressource_path(r_path):
+    try:
+        b_path = sys._MEIPASS
+    except Exception:
+        b_path = os.path.abspath(".")
+    return os.path.join(b_path, r_path)
+
+class AppCandidats:
+    def __init__(self, root):
+        self.root = root
+        icon_p = ressource_path("icon.ico")
+        try:
+            self.root.iconbitmap(icon_p)
+        except:
+            pass
+        self.root.title("SystÃ¨me de Gestion des Candidats")
+        self.root.geometry("1200x600")
+        self.root.configure(bg="#2c3e50")
+        self.candidats = charger_donnees()
+        self.sidebar = tk.Frame(self.root, bg="#1a252f", width=200)
+        self.sidebar.pack(side="left", fill="y")
+        self.sidebar.pack_propagate(False)
+        tk.Label(self.sidebar, text="MENU", fg="white", bg="#1a252f", font=("Arial", 14, "bold")).pack(pady=20)
+        boutons = [
+            ("Ajouter", self.afficher_formulaire),
+            ("Liste ComplÃ¨te", self.afficher_password),
+            ("Mon Dossier", self.afficher_recherche),
+            ("Quitter", self.root.quit)
+        ]
+        for texte, commande in boutons:
+            tk.Button(self.sidebar, text=texte, command=commande, bg="#34495e", fg="white",
+                      font=("Arial", 11), relief="flat", activebackground="#3498db",
+                      cursor="hand2").pack(fill="x", pady=5, padx=10, ipady=8)
+        self.main_frame = tk.Frame(self.root, bg="#ecf0f1")
+        self.main_frame.pack(side="right", fill="both", expand=True)
+        self.afficher_accueil()
+
+    def vider_ecran(self):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+
+    def afficher_accueil(self):
+        self.vider_ecran()
+        tk.Label(self.main_frame, text="Gestion des Dossiers Candidats", bg="#ecf0f1",
+                 font=("Arial", 24, "bold"), fg="#2c3e50").pack(pady=100)
+        tk.Label(self.main_frame, text="SÃ©lectionnez une option dans le menu de gauche.",
+                 bg="#ecf0f1", font=("Arial", 12), fg="#7f8c8d").pack()
+
+    def afficher_formulaire(self):
+        self.vider_ecran()
+        caracteres = string.ascii_uppercase + string.digits
+        while True:
+            prochain_id = ''.join(random.choices(caracteres, k=7))
+            if not any(c["id"] == prochain_id for c in self.candidats):
+                break
+
+        container = tk.Frame(self.main_frame, bg="#ecf0f1")
+        container.pack(pady=30)
+        tk.Label(container, text=f"Ajouter Candidat (ID : {prochain_id})",
+                 font=("Arial", 16, "bold"), bg="#ecf0f1").grid(row=0, columnspan=2, pady=20)
+
+        fields = ["Nom", "PrÃ©nom", "Ãge", "Sexe (M/F)", "Mot de passe"]
+        self.entries = {}
+        for i, field in enumerate(fields):
+            tk.Label(container, text=field, bg="#ecf0f1", font=("Arial", 11)).grid(row=i + 1, column=0, sticky="w", pady=5)
+            show = "*" if field == "Mot de passe" else None
+            ent = tk.Entry(container, font=("Arial", 11), width=30, show=show)
+            ent.grid(row=i + 1, column=1, pady=5, padx=10)
+            self.entries[field] = ent
+
+        tk.Label(container, text="Niveau", bg="#ecf0f1", font=("Arial", 11)).grid(row=6, column=0, sticky="w", pady=5)
+        self.combo_niveau = ttk.Combobox(container, values=["CEP", "BEPC", "PROBATOIRE", "BAC", "LICENCE", "MASTER"],
+                                         state="readonly", width=28)
+        self.combo_niveau.grid(row=6, column=1, pady=5, padx=10)
+        self.combo_niveau.set("CEP")
+
+        tk.Button(container, text="Enregistrer", bg="#27ae60", fg="white", font=("Arial", 11, "bold"),
+                  command=lambda: self.valider_ajout(prochain_id)).grid(row=7, columnspan=2, pady=20, ipady=5, sticky="ew")
+
+    def valider_ajout(self, identifiant):
+        def montrer_id(prochain_id):
+            fen = tk.Toplevel(self.root)
+            fen.title("Votre ID")
+            fen.grab_set()
+            tk.Label(fen, text="Conservez bien cet ID :", font=("Arial", 11)).pack(pady=5)
+            entry = tk.Entry(fen, width=40, font=("Arial", 11))
+            entry.insert(0, str(prochain_id))
+            entry.config(state="readonly")
+            entry.pack(pady=5)
+            def copier():
+                fen.clipboard_clear()
+                fen.clipboard_append(str(prochain_id))
+                fen.update()
+                messagebox.showinfo("CopiÃ©", "ID copiÃ© dans le presse-papiers!", parent=fen)
+            tk.Button(fen, text="Copier", command=copier, bg="#3498db", fg="white").pack(pady=5)
+            tk.Button(fen, text="Fermer", command=fen.destroy).pack(pady=5)
+
+        nom = self.entries["Nom"].get().strip().upper()
+        prenom = self.entries["PrÃ©nom"].get().strip().capitalize()
+        age_str = self.entries["Ãge"].get().strip()
+        sexe = self.entries["Sexe (M/F)"].get().strip().upper()
+        password_str = self.entries["Mot de passe"].get().strip()
+        niveau = self.combo_niveau.get()
+
+        if not all([nom, prenom, age_str, sexe, password_str]):
+            messagebox.showwarning("Erreur", "Tous les champs sont obligatoires.")
+            return
+        try:
+            age = int(age_str)
+            if not 18 <= age <= 33:
+                messagebox.showwarning("Ãge", "Ãge minimum requis : 18 ans. Ãge maximum requis : 33 ans.")
+                return
+        except ValueError:
+            messagebox.showerror("Erreur", "L'Ã¢ge doit Ãªtre un nombre.")
+            return
+        if sexe not in ['M', 'F']:
+            messagebox.showwarning("Sexe", "Veuillez entrer M ou F.")
+            return
+        if nom.isdigit() or prenom.isdigit():
+            messagebox.showwarning("Erreur", "Le nom ou le prenom ne peuvent pas etre uniquement des chiffres.")
+            return
+        if not password_str.isdigit():
+            messagebox.showerror("Erreur", "Le mot de passe doit contenir uniquement des chiffres.")
+            return
+
+        nouveau = {
+            "id": str(identifiant),
+            "nom": nom,
+            "prenom": prenom,
+            "age": age,
+            "sexe": sexe,
+            "password": hash_password(password_str),
+            "niveau": niveau
+        }
+        self.candidats.append(nouveau)
+        sauvegarder_donnees(self.candidats)
+        messagebox.showinfo("SuccÃ¨s", "Candidat ajoutÃ©!")
+        montrer_id(identifiant)
+        self.afficher_accueil()
+
+    def afficher_tout(self, data_list=None, mode_admin=False):
+        self.vider_ecran()
+        data = data_list if data_list is not None else self.candidats
+        titre = "Liste ComplÃ¨te - Mode Admin" if mode_admin else "Mon Dossier"
+        tk.Label(self.main_frame, text=titre, font=("Arial", 18, "bold"),
+                 bg="#ecf0f1", fg="#2c3e50").pack(pady=10)
+
+        frame_tree = tk.Frame(self.main_frame, bg="#ecf0f1")
+        frame_tree.pack(fill="both", expand=True, padx=20, pady=10)
+
+        cols = ("ID", "Nom", "PrÃ©nom", "Ãge", "Sexe", "Niveau")
+        if mode_admin:
+            cols += ("Action",)
+
+        tree = ttk.Treeview(frame_tree, columns=cols, show="headings", height=15)
+        vsb = ttk.Scrollbar(frame_tree, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vsb.set)
+
+        for col in cols:
+            tree.heading(col, text=col)
+            width = 80 if col == "Action" else 120
+            tree.column(col, width=width, anchor="center")
+
+        for c in data:
+            values = (c["id"], c["nom"], c["prenom"], c["age"], c["sexe"], c["niveau"])
+            if mode_admin:
+                values += ("Supprimer",)
+            tree.insert("", "end", values=values)
+
+        tree.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+
+        if mode_admin:
+            def on_tree_select(event):
+                item = tree.focus()
+                if not item: return
+                col = tree.identify_column(event.x)
+                if col == f"#{len(cols)}":
+                    candidat_id = tree.item(item)["values"][0]
+                    self.executer_suppression(candidat_id, admin=True)
+            tree.bind("<Button-1>", on_tree_select)
+
+
+        if data_list and len(data_list) == 1 and not mode_admin:
+            candidat_id = data_list[0]["id"]
+            tk.Button(self.main_frame, text="Supprimer mon dossier", bg="#e74c3c", fg="white",
+                      font=("Arial", 11, "bold"),
+                      command=lambda: self.executer_suppression(candidat_id, admin=False)).pack(pady=10)
+
+    def afficher_password(self):
+        self.vider_ecran()
+        container = tk.Frame(self.main_frame, bg="#ecf0f1")
+        container.pack(pady=20)
+        tk.Label(container, text="Mot de passe administrateur", font=("Arial", 12), bg="#ecf0f1").pack()
+        ent_search = tk.Entry(container, font=("Arial", 12), width=30, show="*")
+        ent_search.pack(pady=10)
+        tk.Button(container, text="Confirmer", bg="#3498db", fg="white",
+                  command=lambda: self.executer_password(ent_search.get())).pack(pady=5)
+
+    def afficher_recherche(self):
+        self.vider_ecran()
+        container = tk.Frame(self.main_frame, bg="#ecf0f1")
+        container.pack(pady=20)
+        tk.Label(container, text="Entrer Votre ID", font=("Arial", 12), bg="#ecf0f1").pack()
+        ent_search = tk.Entry(container, font=("Arial", 12), width=30)
+        ent_search.pack(pady=10)
+        tk.Label(container, text="Mot de passe du candidat", font=("Arial", 12), bg="#ecf0f1").pack()
+        ent_password = tk.Entry(container, font=("Arial", 12), width=30, show="*")
+        ent_password.pack(pady=10)
+        tk.Button(container, text="Rechercher", bg="#3498db", fg="white",
+                  command=lambda: self.executer_recherche(ent_search.get(), ent_password.get())).pack(pady=5)
+
+    def executer_password(self, adpassword):
+        if hash_password(adpassword) == ADMIN_HASH:
+            self.afficher_tout(mode_admin=True)
+        else:
+            messagebox.showerror("Erreur", "Mot de passe administrateur incorrect!")
+
+    def executer_recherche(self, critere, password):
+        critere = critere.strip()
+        password = password.strip()
+        if not critere or not password:
+            messagebox.showwarning("Erreur", "Tous les champs sont obligatoires.")
+            return
+
+        password_hash = hash_password(password)
+        resultats = [c for c in self.candidats if c["id"] == critere and c["password"] == password_hash]
+
+        if resultats:
+            self.afficher_tout(resultats, mode_admin=False)
+        else:
+            messagebox.showerror("Erreur", "Identifiant ou mot de passe incorrect!")
+
+    def executer_suppression(self, identifiant, admin=False):
+        candidat = next((c for c in self.candidats if c["id"] == identifiant), None)
+        if not candidat:
+            messagebox.showwarning("Erreur", "ID introuvable.")
+            return
+
+        msg = f"Supprimer le candidat {candidat['nom']} {candidat['prenom']}?" if admin else "Voulez-vous vraiment supprimer votre dossier? Cette action est irrÃ©versible."
+
+        if messagebox.askyesno("Confirmation", msg):
+            self.candidats = [c for c in self.candidats if c["id"]!= identifiant]
+            sauvegarder_donnees(self.candidats)
+            messagebox.showinfo("SuccÃ¨s", "Candidat supprimÃ©")
+            if admin:
+                self.afficher_tout(mode_admin=True)
+            else:
+                self.afficher_accueil()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = AppCandidats(root)
+    root.mainloop()
